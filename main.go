@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"log/slog"
@@ -36,23 +37,17 @@ func main() {
 		log.Fatal(fmt.Errorf("failed to parse time %s: %w", maxWaitS, err))
 	}
 	for {
-		batch, err := sub.FetchBatch(10, nats.MaxWait(maxWait))
+		ctx, cancel := context.WithTimeout(context.Background(), maxWait)
+		batch, err := sub.FetchBatch(10, nats.Context(ctx))
 		if err != nil {
-			slog.Error("failed to fetch batch", "err", err, "sub", sub.Subject)
-
-			continue
+			slog.Warn("failed to fetch batch", "err", err)
 		}
-		c := 0
 		for m := range batch.Messages() {
 			slog.Info("message received:", "msg", m)
-			m.Ack()
-			c += 1
 		}
 		if bErr := batch.Error(); bErr != nil {
-			slog.Warn("failed to fetch batch", "err", bErr, "count", c)
-
-			continue
+			slog.Warn("failed to fetch batch", "err", bErr)
 		}
-		slog.Info("batch processed", "count", c)
+		cancel()
 	}
 }
